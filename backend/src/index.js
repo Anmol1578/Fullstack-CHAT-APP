@@ -30,11 +30,13 @@ app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 
 // --- SERVE FRONTEND IN PRODUCTION ---
+// --- SERVE FRONTEND IN PRODUCTION ---
 if (process.env.NODE_ENV === "production") {
   const frontendPath = path.join(_dirname, "../frontend/dist");
   app.use(express.static(frontendPath));
 
-  app.get("*", (req, res) => {
+  // Use RegExp /(.*)/ instead of "*" to avoid path-to-regexp errors
+  app.get(/(.*)/, (req, res) => {
     res.sendFile(path.join(frontendPath, "index.html"));
   });
 }
