@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
@@ -8,8 +10,6 @@ import MessageInput from "./MessageInput";
 import MessageSkeleton from "./skeletons/MessageSkeleton";
 
 import { formatMessageTime } from "../lib/utils";
-import { X } from "lucide-react";
-import { createPortal } from "react-dom";
 
 const ChatContainer = () => {
   const {
@@ -22,12 +22,11 @@ const ChatContainer = () => {
   } = useChatStore();
 
   const { authUser } = useAuthStore();
-  const messageEndRef = useRef(null);
 
-  // 🔥 Image viewer state
+  const messageEndRef = useRef(null);
   const [openImage, setOpenImage] = useState(null);
 
-  // Fetch + subscribe
+  // Fetch messages + subscribe to realtime updates
   useEffect(() => {
     if (!selectedUser?._id) return;
 
@@ -35,13 +34,34 @@ const ChatContainer = () => {
     subscribeToMessages();
 
     return () => unsubscribeFromMessages();
-  }, [selectedUser?._id]);
+  }, [selectedUser, getMessages, subscribeToMessages, unsubscribeFromMessages]);
 
-  // Auto scroll
+  // Auto scroll to latest message
   useEffect(() => {
-    if (!messageEndRef.current) return;
-    messageEndRef.current.scrollIntoView({ behavior: "auto" });
+    const timer = setTimeout(() => {
+      messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+
+    return () => clearTimeout(timer);
   }, [messages]);
+
+  // Close image viewer with ESC
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === "Escape") setOpenImage(null);
+    };
+
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, []);
+
+  if (!selectedUser) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-base-content/60">
+        Select a conversation to start chatting
+      </div>
+    );
+  }
 
   if (isMessagesLoading) {
     return (
@@ -54,10 +74,11 @@ const ChatContainer = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-auto">
+    <div className="flex-1 flex flex-col overflow-hidden">
       <ChatHeader />
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
         {messages.map((message, index) => {
           const isLastMessage = index === messages.length - 1;
           const isOwnMessage = message.senderId === authUser._id;
@@ -68,6 +89,7 @@ const ChatContainer = () => {
               className={`chat ${isOwnMessage ? "chat-end" : "chat-start"}`}
               ref={isLastMessage ? messageEndRef : null}
             >
+              {/* Avatar */}
               <div className="chat-image avatar">
                 <div className="size-10 rounded-full border">
                   <img
@@ -76,29 +98,39 @@ const ChatContainer = () => {
                         ? authUser.profilePic || "/avatar.png"
                         : selectedUser?.profilePic || "/avatar.png"
                     }
-                    alt="profile pic"
+                    alt="profile"
                   />
                 </div>
               </div>
 
+              {/* Time */}
               <div className="chat-header mb-1">
                 <time className="text-xs opacity-50 ml-1">
                   {formatMessageTime(message.createdAt)}
                 </time>
               </div>
 
-              <div className="chat-bubble flex flex-col">
-                {/* IMAGE MESSAGE */}
+              {/* Message Bubble */}
+              <div
+                className={`chat-bubble flex flex-col max-w-[80%] transition-all duration-200
+                ${
+                  isOwnMessage
+                    ? "bg-primary text-primary-content"
+                    : "bg-base-200"
+                }`}
+              >
+                {/* Image */}
                 {message.image && (
                   <img
                     src={message.image}
+                    loading="lazy"
                     alt="Attachment"
                     onClick={() => setOpenImage(message.image)}
-                    className="sm:max-w-[200px] rounded-md mb-2 cursor-pointer"
+                    className="max-w-[220px] sm:max-w-[250px] rounded-xl mb-2 cursor-pointer hover:scale-105 transition-transform duration-200"
                   />
                 )}
 
-                {/* TEXT MESSAGE */}
+                {/* Text */}
                 {message.text && <p>{message.text}</p>}
               </div>
             </div>
@@ -108,31 +140,32 @@ const ChatContainer = () => {
 
       <MessageInput />
 
-      {/* 🔥 FULL SCREEN IMAGE VIEWER */}
+      {/* Full Screen Image Viewer */}
       {openImage &&
         createPortal(
           <div
-            className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center"
+            className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm flex items-center justify-center"
             onClick={() => setOpenImage(null)}
           >
             <img
               src={openImage}
               alt="Full View"
-              className="max-w-[95%] max-h-[95%] object-contain"
+              className="max-w-[95%] max-h-[95%] object-contain rounded-lg"
               onClick={(e) => e.stopPropagation()}
             />
 
             <button
               onClick={() => setOpenImage(null)}
-              className="absolute top-4 right-4 text-white"
+              className="absolute top-5 right-5 btn btn-circle btn-sm btn-ghost text-white"
             >
-              <X size={32} />
+              <X size={24} />
             </button>
           </div>,
-          document.body,
+          document.body
         )}
     </div>
   );
 };
 
 export default ChatContainer;
+
