@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
@@ -7,7 +8,7 @@ import { Users, UserCheck } from "lucide-react";
 const Sidebar = () => {
   const { getUsers, users, selectedUser, setSelectedUser, isUsersLoading } =
     useChatStore();
-  const { onlineUsers } = useAuthStore();
+  const { onlineUsers, authUser } = useAuthStore();
 
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
 
@@ -23,7 +24,6 @@ const Sidebar = () => {
 
   return (
     <aside className="h-full w-20 lg:w-72 border-r border-base-300 flex flex-col transition-all duration-200">
-
       {/* Header */}
       <div className="border-b border-base-300 w-full p-5">
         <div className="flex items-center gap-2 justify-center lg:justify-start">
@@ -39,7 +39,9 @@ const Sidebar = () => {
               checked={showOnlineOnly}
               onChange={(e) => setShowOnlineOnly(e.target.checked)}
               className={`checkbox checkbox-sm ${
-                showOnlineOnly ? "checkbox-success shadow-[0_0_10px_#22c55e]" : ""
+                showOnlineOnly
+                  ? "checkbox-success shadow-[0_0_10px_#22c55e]"
+                  : ""
               }`}
             />
             <UserCheck className="w-4 h-4 text-green-500" />
@@ -47,7 +49,7 @@ const Sidebar = () => {
           </label>
 
           <span className="text-xs text-zinc-500">
-            ({onlineUsers.length - 1} online)
+            ({onlineUsers.filter((id) => id !== authUser?._id).length} online)
           </span>
         </div>
 
@@ -92,9 +94,7 @@ const Sidebar = () => {
                 )}
               </div>
 
-              <span className="hidden lg:block truncate">
-                {user.fullName}
-              </span>
+              <span className="hidden lg:block truncate">{user.fullName}</span>
             </button>
           </li>
         ))}
