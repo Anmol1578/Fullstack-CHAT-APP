@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import {
   MessageSquare,
@@ -36,7 +37,7 @@ const SignUpPage = () => {
 
     const error = validateForm();
     if (error) {
-      alert(error); // replace with toast if you have one
+      alert(error); 
       return;
     }
 
@@ -68,11 +69,11 @@ const SignUpPage = () => {
                 <span className="label-text font-medium">Full Name</span>
               </label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-base-content/40" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-base-content/40 z-10" />
                 <input
                   type="text"
                   className="input input-bordered input-primary w-full pl-10 dark:bg-base-300 dark:text-white"
-                  placeholder="Enter your name"
+                  placeholder="Enter your full name"
                   value={formData.fullName}
                   onChange={(e) =>
                     setFormData({ ...formData, fullName: e.target.value })
@@ -87,11 +88,11 @@ const SignUpPage = () => {
                 <span className="label-text font-medium">Email</span>
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-base-content/40" />
+               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-base-content/40 z-10" />
                 <input
                   type="email"
                   className="input input-bordered input-primary w-full pl-10 dark:bg-base-300 dark:text-white"
-                  placeholder="Ex - mail@anmol.com"
+                  placeholder="you@example.com"
                   value={formData.email}
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
@@ -106,7 +107,7 @@ const SignUpPage = () => {
                 <span className="label-text font-medium">Password</span>
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-base-content/40" />
+               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-base-content/40 z-10" />
                 <input
                   type={showPassword ? "text" : "password"}
                   className="input input-bordered input-primary w-full pl-10 dark:bg-base-300 dark:text-white"
