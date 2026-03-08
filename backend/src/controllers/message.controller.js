@@ -1,3 +1,4 @@
+
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
 import cloudinary from "../lib/cloudinary.js";
@@ -22,16 +23,56 @@ export const getMessages = async (req, res) => {
     const { id: userToChatId } = req.params;
     const myId = req.user._id;
 
+    // mark messages as seen
+    await Message.updateMany(
+      {
+        senderId: userToChatId,
+        receiverId: myId,
+        seen: false,
+      },
+      {
+        $set: { seen: true },
+      },
+    );
+
     const messages = await Message.find({
       $or: [
         { senderId: myId, receiverId: userToChatId },
         { senderId: userToChatId, receiverId: myId },
       ],
-    });
+    }).sort({ createdAt: 1 });
 
     res.status(200).json(messages);
   } catch (error) {
-    console.log("Error in getMessages controller: ", error.message);
+    console.log("Error in getMessages controller:", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const markMessagesAsSeen = async (req, res) => {
+  try {
+    const { id: senderId } = req.params;
+    const myId = req.user._id;
+
+    // update messages
+    await Message.updateMany(
+      { senderId: senderId, receiverId: myId, seen: false },
+      { seen: true },
+    );
+
+    // get sender socket
+    const senderSocketId = getReceiverSocketId(senderId);
+
+    // notify sender that messages are seen
+    if (senderSocketId) {
+      io.to(senderSocketId).emit("messagesSeen", {
+        senderId: myId,
+      });
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.log("Error in markMessagesAsSeen:", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 };
