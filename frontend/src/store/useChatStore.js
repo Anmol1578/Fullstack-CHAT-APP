@@ -49,6 +49,7 @@ export const useChatStore = create((set, get) => ({
       image: messageData.image,
       createdAt: new Date().toISOString(),
       pending: true,
+      seen: false,
     };
 
     set({ messages: [...messages, tempMessage] });
@@ -59,7 +60,7 @@ export const useChatStore = create((set, get) => ({
         messageData,
       );
 
-      // ✅ replace temp message with real one
+      // replace temp message with real one
       set((state) => ({
         messages: state.messages.map((msg) =>
           msg._id === tempMessage._id ? res.data : msg,
@@ -68,7 +69,7 @@ export const useChatStore = create((set, get) => ({
 
       return res.data;
     } catch (error) {
-      // ❌ rollback on failure
+      // rollback on failure
       set((state) => ({
         messages: state.messages.filter((msg) => msg._id !== tempMessage._id),
       }));
@@ -82,13 +83,14 @@ export const useChatStore = create((set, get) => ({
 
     if (!socket || !selectedUser?._id) return;
 
-    // 🔥 REMOVE previous listener first
+    const authUserId = useAuthStore.getState().authUser?._id;
+
+    // remove old listeners
     socket.off("newMessage");
+    socket.off("messagesSeen");
 
+    // NEW MESSAGE
     socket.on("newMessage", (newMessage) => {
-      const authUserId = useAuthStore.getState().authUser?._id;
-
-      // ✅ only accept messages for current chat
       if (
         newMessage.senderId !== selectedUser._id &&
         newMessage.senderId !== authUserId
@@ -100,11 +102,26 @@ export const useChatStore = create((set, get) => ({
         messages: [...state.messages, newMessage],
       }));
     });
+
+    socket.on("messagesSeen", ({ senderId }) => {
+      const { selectedUser } = get();
+
+      if (!selectedUser) return;
+
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg.senderId === authUserId && msg.receiverId === selectedUser._id
+            ? { ...msg, seen: true }
+            : msg,
+        ),
+      }));
+    });
   },
 
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
     socket?.off("newMessage");
+    socket?.off("messagesSeen");
   },
 
   setSelectedUser: (selectedUser) => set({ selectedUser }),
