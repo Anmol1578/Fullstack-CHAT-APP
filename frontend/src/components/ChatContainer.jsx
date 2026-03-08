@@ -38,7 +38,6 @@ const ChatContainer = () => {
 
   useEffect(() => {
     if (!selectedUser?._id || !socket) return;
-
     if (messages.length === 0) return;
 
     socket.emit("markMessagesSeen", {
@@ -58,7 +57,6 @@ const ChatContainer = () => {
     };
 
     container.addEventListener("scroll", handleScroll);
-
     return () => container.removeEventListener("scroll", handleScroll);
   }, []);
 
@@ -127,39 +125,57 @@ const ChatContainer = () => {
                 isOwnMessage ? "justify-end" : "justify-start"
               }`}
             >
-              <div
-                className={`px-3 py-2 max-w-[65%] w-fit break-words rounded-2xl ${
-                  isOwnMessage
-                    ? "bg-indigo-200 text-gray-900 dark:bg-indigo-600 dark:text-white rounded-br-md"
-                    : "bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-gray-100 rounded-bl-md"
-                }`}
-              >
+              <div className="max-w-[75%] sm:max-w-[65%] w-fit">
+
+                {/* IMAGE MESSAGE */}
                 {message.image && (
-                  <img
-                    src={message.image}
-                    alt="Attachment"
-                    loading="lazy"
-                    onClick={() => setOpenImage(message.image)}
-                    className="max-w-[240px] rounded-xl mb-1 cursor-pointer"
-                  />
+                  <div className="relative">
+                    <img
+                      src={message.image}
+                      alt="Attachment"
+                      loading="lazy"
+                      onClick={() => setOpenImage(message.image)}
+                      className="max-w-full max-h-[320px] object-cover rounded-md cursor-pointer"
+                    />
+
+                    <div className="absolute bottom-1 right-2 flex items-center gap-1 text-white text-[10px] bg-black/40 px-1 rounded">
+                      <span>{formatMessageTime(message.createdAt)}</span>
+
+                      {isOwnMessage &&
+                        (message.seen ? (
+                          <CheckCheck size={12} className="text-blue-400" />
+                        ) : (
+                          <Check size={12} />
+                        ))}
+                    </div>
+                  </div>
                 )}
 
+                {/* TEXT MESSAGE */}
                 {message.text && (
-                  <p className="text-sm leading-tight">{message.text}</p>
+                  <div
+                    className={`px-3 py-2 mt-1 break-words rounded-2xl ${
+                      isOwnMessage
+                        ? "bg-indigo-200 text-gray-900 dark:bg-indigo-600 dark:text-white rounded-br-md"
+                        : "bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-gray-100 rounded-bl-md"
+                    }`}
+                  >
+                    <p className="text-sm leading-tight">{message.text}</p>
+
+                    <div className="flex justify-end items-center mt-[2px] gap-1">
+                      <span className="text-[10px] opacity-70">
+                        {formatMessageTime(message.createdAt)}
+                      </span>
+
+                      {isOwnMessage &&
+                        (message.seen ? (
+                          <CheckCheck size={13} className="text-blue-600" />
+                        ) : (
+                          <Check size={13} className="opacity-70" />
+                        ))}
+                    </div>
+                  </div>
                 )}
-
-                <div className="flex justify-end items-center mt-[2px] gap-1">
-                  <span className="text-[10px] opacity-70">
-                    {formatMessageTime(message.createdAt)}
-                  </span>
-
-                  {isOwnMessage &&
-                    (message.seen ? (
-                      <CheckCheck size={13} className="text-blue-600" />
-                    ) : (
-                      <Check size={13} className="opacity-70" />
-                    ))}
-                </div>
               </div>
             </div>
           );
@@ -168,6 +184,7 @@ const ChatContainer = () => {
 
       <MessageInput />
 
+      {/* IMAGE MODAL */}
       {openImage &&
         createPortal(
           <div
@@ -188,7 +205,7 @@ const ChatContainer = () => {
               <X size={26} />
             </button>
           </div>,
-          document.body,
+          document.body
         )}
     </div>
   );
