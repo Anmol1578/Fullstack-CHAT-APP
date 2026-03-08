@@ -22,7 +22,7 @@ const SettingsPage = () => {
       {/* Close Button */}
       <button
         onClick={() => navigate("/")}
-        className="fixed top-16 right-4 sm:top-6 sm:right-6 z-50 text-base-content hover:text-error transition"
+        className="fixed top-18 right-4 sm:top-6 sm:right-6 z-50 text-base-content hover:text-error transition"
       >
         <X size={24} />
       </button>
