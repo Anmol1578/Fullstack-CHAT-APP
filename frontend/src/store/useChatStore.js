@@ -3,56 +3,58 @@ import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "./useAuthStore";
 
+// simple memory cache
+const messageCache = {};
+
 export const useChatStore = create((set, get) => ({
   messages: [],
   users: [],
   selectedUser: null,
   isUsersLoading: false,
   isMessagesLoading: false,
+  editingMessage: null,
 
+  // GET USERS
   getUsers: async () => {
     set({ isUsersLoading: true });
+
     try {
       const res = await axiosInstance.get("/messages/users");
       set({ users: res.data });
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to load users");
+      toast.error("Failed to load users");
     } finally {
       set({ isUsersLoading: false });
     }
   },
 
+  // GET MESSAGES (FAST WITH CACHE)
+
   getMessages: async (userId) => {
+    // show cached messages instantly
+    if (messageCache[userId]) {
+      set({ messages: messageCache[userId] });
+    }
+
     set({ isMessagesLoading: true });
+
     try {
       const res = await axiosInstance.get(`/messages/${userId}`);
+
+      // save in cache
+      messageCache[userId] = res.data;
+
       set({ messages: res.data });
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to load messages");
+      toast.error("Failed to load messages");
     } finally {
       set({ isMessagesLoading: false });
     }
   },
 
+  // SEND MESSAGE
   sendMessage: async (messageData) => {
-    const { selectedUser, messages } = get();
-    const authUser = useAuthStore.getState().authUser;
-
-    if (!selectedUser?._id) throw new Error("No user selected");
-
-    // 🔥 optimistic message
-    const tempMessage = {
-      _id: Date.now(), // temp id
-      senderId: authUser._id,
-      receiverId: selectedUser._id,
-      text: messageData.text,
-      image: messageData.image,
-      createdAt: new Date().toISOString(),
-      pending: true,
-      seen: false,
-    };
-
-    set({ messages: [...messages, tempMessage] });
+    const { selectedUser } = get();
 
     try {
       const res = await axiosInstance.post(
@@ -60,68 +62,115 @@ export const useChatStore = create((set, get) => ({
         messageData,
       );
 
-      // replace temp message with real one
+      // instant UI update
       set((state) => ({
-        messages: state.messages.map((msg) =>
-          msg._id === tempMessage._id ? res.data : msg,
-        ),
+        messages: [...state.messages, res.data],
       }));
 
-      return res.data;
+      // update cache
+      if (messageCache[selectedUser._id]) {
+        messageCache[selectedUser._id].push(res.data);
+      }
     } catch (error) {
-      // rollback on failure
-      set((state) => ({
-        messages: state.messages.filter((msg) => msg._id !== tempMessage._id),
-      }));
+      toast.error(error.response?.data?.message || "Failed to send message");
       throw error;
     }
   },
 
+  setEditingMessage: (message) => set({ editingMessage: message }),
+
+  // SOCKET SUBSCRIPTIONS
   subscribeToMessages: () => {
-    const socket = useAuthStore.getState().socket;
     const { selectedUser } = get();
+    if (!selectedUser) return;
 
-    if (!socket || !selectedUser?._id) return;
+    const socket = useAuthStore.getState().socket;
+    const authUser = useAuthStore.getState().authUser;
 
-    const authUserId = useAuthStore.getState().authUser?._id;
+    if (!socket) return;
 
-    // remove old listeners
-    socket.off("newMessage");
-    socket.off("messagesSeen");
+    get().unsubscribeFromMessages();
 
     // NEW MESSAGE
     socket.on("newMessage", (newMessage) => {
-      if (
-        newMessage.senderId !== selectedUser._id &&
-        newMessage.senderId !== authUserId
-      ) {
-        return;
-      }
+      const isRelevant =
+        newMessage.senderId.toString() === selectedUser._id.toString() ||
+        newMessage.receiverId.toString() === selectedUser._id.toString();
+
+      if (!isRelevant) return;
+
+      const { messages } = get();
+
+      if (messages.find((m) => m._id === newMessage._id)) return;
 
       set((state) => ({
         messages: [...state.messages, newMessage],
       }));
+
+      // update cache
+      if (messageCache[selectedUser._id]) {
+        messageCache[selectedUser._id].push(newMessage);
+      } else {
+        messageCache[selectedUser._id] = [newMessage];
+      }
     });
 
-    socket.on("messagesSeen", ({ senderId }) => {
-      const { selectedUser } = get();
+    // EDIT MESSAGE
+    socket.on("messageUpdated", (updatedMsg) => {
+      set((state) => ({
+        messages: state.messages.map((m) =>
+          m._id === updatedMsg._id ? updatedMsg : m,
+        ),
+      }));
+    });
 
-      if (!selectedUser) return;
+    // DELETE FOR EVERYONE
+    socket.on("messageDeletedGlobally", (messageId) => {
+      set((state) => ({
+        messages: state.messages.map((m) =>
+          m._id === messageId
+            ? {
+                ...m,
+                text: "",
+                image: "",
+                isDeletedForEveryone: true,
+              }
+            : m,
+        ),
+      }));
+    });
+
+    // DELETE FOR ME
+    socket.on("messageHiddenLocally", (messageId) => {
+      set((state) => ({
+        messages: state.messages.filter((m) => m._id !== messageId),
+      }));
+    });
+
+    // SEEN STATUS
+    socket.on("messagesSeen", ({ senderId }) => {
+      if (senderId.toString() !== selectedUser._id.toString()) return;
 
       set((state) => ({
-        messages: state.messages.map((msg) =>
-          msg.senderId === authUserId && msg.receiverId === selectedUser._id
-            ? { ...msg, seen: true }
-            : msg,
+        messages: state.messages.map((m) =>
+          m.senderId.toString() === authUser._id.toString()
+            ? { ...m, seen: true, status: "seen" }
+            : m,
         ),
       }));
     });
   },
 
+  // UNSUBSCRIBE
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
-    socket?.off("newMessage");
-    socket?.off("messagesSeen");
+    if (!socket) return;
+
+    socket.off("newMessage");
+    socket.off("messageUpdated");
+    socket.off("messageDeletedGlobally");
+    socket.off("messageHiddenLocally");
+    socket.off("messagesSeen");
   },
 
   setSelectedUser: (selectedUser) => set({ selectedUser }),
