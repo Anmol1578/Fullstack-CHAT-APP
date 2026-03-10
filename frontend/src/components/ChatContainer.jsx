@@ -1,6 +1,7 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, CheckCheck, Trash2, Edit3, Reply, X } from "lucide-react";
+import { Check, CheckCheck, Trash2, Edit3, Reply } from "lucide-react";
 
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
@@ -27,15 +28,19 @@ const ChatContainer = () => {
   const prevMessageCount = useRef(0);
   const userNearBottom = useRef(true);
 
-  // ✅ mobile long press timer
   const pressTimer = useRef(null);
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
 
   const [openImage, setOpenImage] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null);
   const [deleteForEveryone, setDeleteForEveryone] = useState(false);
   const [replyingMessage, setReplyingMessage] = useState(null);
+  const [swipingId, setSwipingId] = useState(null);
+  const [swipeDistance, setSwipeDistance] = useState(0);
 
+  // Fetch messages & subscribe
   useEffect(() => {
     if (!selectedUser?._id) return;
 
@@ -45,12 +50,14 @@ const ChatContainer = () => {
     return () => unsubscribeFromMessages();
   }, [selectedUser]);
 
+  // Mark messages seen
   useEffect(() => {
     if (socket && selectedUser?._id && messages.length > 0) {
       socket.emit("markMessagesSeen", { senderId: selectedUser._id });
     }
   }, [messages]);
 
+  // Scroll tracking
   useEffect(() => {
     const container = chatContainerRef.current;
     if (!container) return;
@@ -58,7 +65,6 @@ const ChatContainer = () => {
     const handleScroll = () => {
       const distance =
         container.scrollHeight - container.scrollTop - container.clientHeight;
-
       userNearBottom.current = distance < 120;
     };
 
@@ -66,12 +72,12 @@ const ChatContainer = () => {
     return () => container.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Auto scroll new messages
   useEffect(() => {
     const container = chatContainerRef.current;
     if (!container) return;
 
     const newMessageArrived = messages.length > prevMessageCount.current;
-
     if (newMessageArrived && userNearBottom.current) {
       container.scrollTop = container.scrollHeight;
     }
@@ -79,43 +85,73 @@ const ChatContainer = () => {
     prevMessageCount.current = messages.length;
   }, [messages]);
 
+  // Close context menu on scroll
   useEffect(() => {
     const closeMenu = () => setContextMenu(null);
     window.addEventListener("scroll", closeMenu);
     return () => window.removeEventListener("scroll", closeMenu);
   }, []);
 
+  // Context menu (right click)
   const handleContextMenu = (e, message) => {
     e.preventDefault();
     e.stopPropagation();
 
+    const menuWidth = 176;
     const menuHeight = 160;
 
-    const yPos =
-      e.clientY + menuHeight > window.innerHeight
-        ? e.clientY - menuHeight
-        : e.clientY;
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth);
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight);
 
-    setContextMenu({
-      x: e.clientX,
-      y: yPos,
-      message,
-    });
+    setContextMenu({ x, y, message });
   };
 
-  // ✅ MOBILE LONG PRESS
-  const handleTouchStart = (message) => {
+  // Touch start (long press + swipe)
+  const handleTouchStart = (e, message) => {
+    if (e.touches.length !== 1) return;
+
+    const touch = e.touches[0];
+    touchStartX.current = touch.clientX;
+    touchStartY.current = touch.clientY;
+
+    // Start long press timer
     pressTimer.current = setTimeout(() => {
-      setContextMenu({
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-        message,
-      });
+      const menuWidth = 176;
+      const menuHeight = 160;
+
+      const x = Math.min(touch.clientX, window.innerWidth - menuWidth);
+      const y = Math.min(touch.clientY, window.innerHeight - menuHeight);
+
+      setContextMenu({ x, y, message });
     }, 500);
   };
 
-  const handleTouchEnd = () => {
+  // Touch move for swipe
+  const handleTouchMove = (e, message) => {
+    if (!touchStartX.current) return;
+
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - touchStartX.current;
+    const deltaY = touch.clientY - touchStartY.current;
+
+    // Horizontal swipe only, threshold 40px, vertical scroll cancels swipe
+    if (Math.abs(deltaX) > 40 && Math.abs(deltaY) < 30 && deltaX > 0) {
+      setSwipingId(message._id);
+      setSwipeDistance(deltaX);
+      clearTimeout(pressTimer.current); // cancel long press
+    }
+  };
+
+  // Touch end
+  const handleTouchEnd = (e, message) => {
     clearTimeout(pressTimer.current);
+
+    if (swipingId === message._id && swipeDistance > 60) {
+      handleReply(message);
+    }
+
+    setSwipingId(null);
+    setSwipeDistance(0);
   };
 
   const handleReply = (message) => {
@@ -175,22 +211,27 @@ const ChatContainer = () => {
         className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3"
       >
         {messages.slice(-60).map((message) => {
-          const isOwnMessage =
-            String(message.senderId) === String(authUser._id);
+          const isOwnMessage = String(message.senderId) === String(authUser._id);
 
           return (
             <div
               key={message._id}
               onContextMenu={(e) => handleContextMenu(e, message)}
-              onTouchStart={() => handleTouchStart(message)}
-              onTouchEnd={handleTouchEnd}
-              className={`flex ${
-                isOwnMessage ? "justify-end" : "justify-start"
-              }`}
+              onTouchStart={(e) => handleTouchStart(e, message)}
+              onTouchMove={(e) => handleTouchMove(e, message)}
+              onTouchEnd={(e) => handleTouchEnd(e, message)}
+              className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
             >
               <div className="max-w-[75%] sm:max-w-[65%] w-fit group relative">
+                {/* Swipe arrow */}
+                {swipingId === message._id && (
+                  <div className="absolute -left-6 top-1/2 -translate-y-1/2 text-blue-400">
+                    <Reply size={24} />
+                  </div>
+                )}
+
                 <div
-                  className={`px-3 py-2 mt-1 break-words rounded-2xl shadow-sm ${
+                  className={`px-3 py-2 mt-1 break-words rounded-2xl shadow-sm select-none ${
                     isOwnMessage
                       ? "bg-primary text-primary-content rounded-br-none"
                       : "bg-base-200 text-base-content rounded-bl-none"
@@ -212,9 +253,7 @@ const ChatContainer = () => {
                       {message.replyPreview && (
                         <div className="border-l-4 border-blue-400 pl-2 mb-1 text-xs opacity-80">
                           <p className="font-semibold text-blue-400">Reply</p>
-                          <p className="truncate">
-                            {message.replyPreview.text}
-                          </p>
+                          <p className="truncate">{message.replyPreview.text}</p>
                         </div>
                       )}
 
@@ -224,9 +263,7 @@ const ChatContainer = () => {
 
                   <div className="flex justify-end items-center mt-1 gap-1">
                     {message.isEdited && !message.isDeletedForEveryone && (
-                      <span className="text-[9px] opacity-60 mr-1">
-                        (edited)
-                      </span>
+                      <span className="text-[9px] opacity-60 mr-1">(edited)</span>
                     )}
 
                     <span className="text-[10px] opacity-70">
@@ -235,17 +272,9 @@ const ChatContainer = () => {
 
                     {isOwnMessage && (
                       <>
-                        {message.status === "sent" && (
-                          <Check size={13} className="opacity-70" />
-                        )}
-
-                        {message.status === "delivered" && (
-                          <CheckCheck size={13} className="opacity-70" />
-                        )}
-
-                        {message.status === "seen" && (
-                          <CheckCheck size={13} className="text-blue-400" />
-                        )}
+                        {message.status === "sent" && <Check size={13} className="opacity-70" />}
+                        {message.status === "delivered" && <CheckCheck size={13} className="opacity-70" />}
+                        {message.status === "seen" && <CheckCheck size={13} className="text-blue-400" />}
                       </>
                     )}
                   </div>
@@ -256,11 +285,9 @@ const ChatContainer = () => {
         })}
       </div>
 
-      <MessageInput
-        replyingMessage={replyingMessage}
-        setReplyingMessage={setReplyingMessage}
-      />
+      <MessageInput replyingMessage={replyingMessage} setReplyingMessage={setReplyingMessage} />
 
+      {/* Context Menu */}
       {contextMenu && (
         <div
           className="fixed z-[1000] bg-white dark:bg-gray-800 shadow-2xl rounded-xl py-2 w-44 border"
@@ -300,17 +327,14 @@ const ChatContainer = () => {
         </div>
       )}
 
+      {/* Delete Modal */}
       {deleteModal &&
         createPortal(
           <div className="fixed inset-0 z-[1001] bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 rounded-2xl p-6 max-w-sm w-full shadow-xl border border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold mb-2 dark:text-white">
-                Delete message
-              </h3>
+              <h3 className="text-lg font-semibold mb-2 dark:text-white">Delete message</h3>
 
-              <p className="text-sm opacity-70 mb-4">
-                This message will be deleted permanently.
-              </p>
+              <p className="text-sm opacity-70 mb-4">This message will be deleted permanently.</p>
 
               {String(deleteModal.senderId) === String(authUser._id) &&
                 !deleteModal.isDeletedForEveryone && (
@@ -341,21 +365,19 @@ const ChatContainer = () => {
               </div>
             </div>
           </div>,
-          document.body,
+          document.body
         )}
 
+      {/* Image Viewer */}
       {openImage &&
         createPortal(
           <div
             className="fixed inset-0 bg-black/90 flex items-center justify-center"
             onClick={() => setOpenImage(null)}
           >
-            <img
-              src={openImage}
-              className="max-w-[95%] max-h-[95%] object-contain"
-            />
+            <img src={openImage} className="max-w-[95%] max-h-[95%] object-contain" />
           </div>,
-          document.body,
+          document.body
         )}
     </div>
   );
