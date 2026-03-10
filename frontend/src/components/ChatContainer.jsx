@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, Check, CheckCheck } from "lucide-react";
+import { Check, CheckCheck, Trash2, Edit3, Reply, X } from "lucide-react";
 
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
@@ -8,7 +8,6 @@ import { useAuthStore } from "../store/useAuthStore";
 import ChatHeader from "./ChatHeader";
 import MessageInput from "./MessageInput";
 import MessageSkeleton from "./skeletons/MessageSkeleton";
-
 import { formatMessageTime } from "../lib/utils";
 
 const ChatContainer = () => {
@@ -19,13 +18,23 @@ const ChatContainer = () => {
     selectedUser,
     subscribeToMessages,
     unsubscribeFromMessages,
+    setEditingMessage,
   } = useChatStore();
 
   const { authUser, socket } = useAuthStore();
 
   const chatContainerRef = useRef(null);
-  const isUserAtBottom = useRef(true);
+  const prevMessageCount = useRef(0);
+  const userNearBottom = useRef(true);
+
+  // ✅ mobile long press timer
+  const pressTimer = useRef(null);
+
   const [openImage, setOpenImage] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [deleteModal, setDeleteModal] = useState(null);
+  const [deleteForEveryone, setDeleteForEveryone] = useState(false);
+  const [replyingMessage, setReplyingMessage] = useState(null);
 
   useEffect(() => {
     if (!selectedUser?._id) return;
@@ -37,23 +46,20 @@ const ChatContainer = () => {
   }, [selectedUser]);
 
   useEffect(() => {
-    if (!selectedUser?._id || !socket) return;
-    if (messages.length === 0) return;
-
-    socket.emit("markMessagesSeen", {
-      senderId: selectedUser._id,
-    });
-  }, [selectedUser, messages.length]);
+    if (socket && selectedUser?._id && messages.length > 0) {
+      socket.emit("markMessagesSeen", { senderId: selectedUser._id });
+    }
+  }, [messages]);
 
   useEffect(() => {
     const container = chatContainerRef.current;
     if (!container) return;
 
     const handleScroll = () => {
-      const distanceFromBottom =
+      const distance =
         container.scrollHeight - container.scrollTop - container.clientHeight;
 
-      isUserAtBottom.current = distanceFromBottom < 80;
+      userNearBottom.current = distance < 120;
     };
 
     container.addEventListener("scroll", handleScroll);
@@ -64,148 +70,292 @@ const ChatContainer = () => {
     const container = chatContainerRef.current;
     if (!container) return;
 
-    requestAnimationFrame(() => {
+    const newMessageArrived = messages.length > prevMessageCount.current;
+
+    if (newMessageArrived && userNearBottom.current) {
       container.scrollTop = container.scrollHeight;
-    });
-  }, [selectedUser]);
+    }
+
+    prevMessageCount.current = messages.length;
+  }, [messages]);
 
   useEffect(() => {
-    const container = chatContainerRef.current;
-    if (!container) return;
-
-    if (!isUserAtBottom.current) return;
-
-    requestAnimationFrame(() => {
-      container.scrollTop = container.scrollHeight;
-    });
-  }, [messages.length]);
-
-  useEffect(() => {
-    const handleEsc = (e) => {
-      if (e.key === "Escape") setOpenImage(null);
-    };
-
-    window.addEventListener("keydown", handleEsc);
-    return () => window.removeEventListener("keydown", handleEsc);
+    const closeMenu = () => setContextMenu(null);
+    window.addEventListener("scroll", closeMenu);
+    return () => window.removeEventListener("scroll", closeMenu);
   }, []);
 
-  if (!selectedUser) {
+  const handleContextMenu = (e, message) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const menuHeight = 160;
+
+    const yPos =
+      e.clientY + menuHeight > window.innerHeight
+        ? e.clientY - menuHeight
+        : e.clientY;
+
+    setContextMenu({
+      x: e.clientX,
+      y: yPos,
+      message,
+    });
+  };
+
+  // ✅ MOBILE LONG PRESS
+  const handleTouchStart = (message) => {
+    pressTimer.current = setTimeout(() => {
+      setContextMenu({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+        message,
+      });
+    }, 500);
+  };
+
+  const handleTouchEnd = () => {
+    clearTimeout(pressTimer.current);
+  };
+
+  const handleReply = (message) => {
+    setReplyingMessage(message);
+    setContextMenu(null);
+  };
+
+  const confirmDelete = () => {
+    if (!deleteModal || !socket) return;
+
+    if (deleteForEveryone) {
+      socket.emit("deleteForEveryone", {
+        messageId: deleteModal._id,
+        receiverId: selectedUser._id,
+      });
+    } else {
+      socket.emit("deleteForMe", { messageId: deleteModal._id });
+    }
+
+    setDeleteModal(null);
+    setDeleteForEveryone(false);
+  };
+
+  const handleEditInitiate = (message) => {
+    setEditingMessage(message);
+    setContextMenu(null);
+  };
+
+  if (!selectedUser)
     return (
-      <div className="flex-1 flex items-center justify-center text-base-content/60">
-        Select a conversation to start chatting
+      <div className="flex-1 flex items-center justify-center opacity-60">
+        Select a conversation
       </div>
     );
-  }
 
-  if (isMessagesLoading) {
+  if (isMessagesLoading)
     return (
-      <div className="flex-1 flex flex-col overflow-auto">
+      <div className="flex-1 flex flex-col">
         <ChatHeader />
         <MessageSkeleton />
-        <MessageInput />
+        <MessageInput
+          replyingMessage={replyingMessage}
+          setReplyingMessage={setReplyingMessage}
+        />
       </div>
     );
-  }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div
+      className="flex-1 flex flex-col relative"
+      onClick={() => setContextMenu(null)}
+    >
       <ChatHeader />
 
       <div
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 scroll-smooth"
+        className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3"
       >
-        {messages.map((message) => {
-          const isOwnMessage = message.senderId === authUser._id;
+        {messages.slice(-60).map((message) => {
+          const isOwnMessage =
+            String(message.senderId) === String(authUser._id);
 
           return (
             <div
               key={message._id}
+              onContextMenu={(e) => handleContextMenu(e, message)}
+              onTouchStart={() => handleTouchStart(message)}
+              onTouchEnd={handleTouchEnd}
               className={`flex ${
                 isOwnMessage ? "justify-end" : "justify-start"
               }`}
             >
-              <div className="max-w-[75%] sm:max-w-[65%] w-fit">
-
-                {/* IMAGE MESSAGE */}
-                {message.image && (
-                  <div className="relative">
+              <div className="max-w-[75%] sm:max-w-[65%] w-fit group relative">
+                <div
+                  className={`px-3 py-2 mt-1 break-words rounded-2xl shadow-sm ${
+                    isOwnMessage
+                      ? "bg-primary text-primary-content rounded-br-none"
+                      : "bg-base-200 text-base-content rounded-bl-none"
+                  } ${message.isDeletedForEveryone ? "italic opacity-60" : ""}`}
+                >
+                  {message.image && !message.isDeletedForEveryone && (
                     <img
                       src={message.image}
                       alt="Attachment"
-                      loading="lazy"
                       onClick={() => setOpenImage(message.image)}
-                      className="max-w-full max-h-[320px] object-cover rounded-md cursor-pointer"
+                      className="max-w-full max-h-[300px] object-cover rounded-lg mb-1 cursor-pointer"
                     />
+                  )}
 
-                    <div className="absolute bottom-1 right-2 flex items-center gap-1 text-white text-[10px] bg-black/40 px-1 rounded">
-                      <span>{formatMessageTime(message.createdAt)}</span>
+                  {message.isDeletedForEveryone ? (
+                    <p className="text-sm italic">This message was deleted</p>
+                  ) : (
+                    <>
+                      {message.replyPreview && (
+                        <div className="border-l-4 border-blue-400 pl-2 mb-1 text-xs opacity-80">
+                          <p className="font-semibold text-blue-400">Reply</p>
+                          <p className="truncate">
+                            {message.replyPreview.text}
+                          </p>
+                        </div>
+                      )}
 
-                      {isOwnMessage &&
-                        (message.seen ? (
-                          <CheckCheck size={12} className="text-blue-400" />
-                        ) : (
-                          <Check size={12} />
-                        ))}
-                    </div>
-                  </div>
-                )}
+                      <p className="text-sm leading-tight">{message.text}</p>
+                    </>
+                  )}
 
-                {/* TEXT MESSAGE */}
-                {message.text && (
-                  <div
-                    className={`px-3 py-2 mt-1 break-words rounded-2xl ${
-                      isOwnMessage
-                        ? "bg-indigo-200 text-gray-900 dark:bg-indigo-600 dark:text-white rounded-br-md"
-                        : "bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-gray-100 rounded-bl-md"
-                    }`}
-                  >
-                    <p className="text-sm leading-tight">{message.text}</p>
-
-                    <div className="flex justify-end items-center mt-[2px] gap-1">
-                      <span className="text-[10px] opacity-70">
-                        {formatMessageTime(message.createdAt)}
+                  <div className="flex justify-end items-center mt-1 gap-1">
+                    {message.isEdited && !message.isDeletedForEveryone && (
+                      <span className="text-[9px] opacity-60 mr-1">
+                        (edited)
                       </span>
+                    )}
 
-                      {isOwnMessage &&
-                        (message.seen ? (
-                          <CheckCheck size={13} className="text-blue-600" />
-                        ) : (
+                    <span className="text-[10px] opacity-70">
+                      {formatMessageTime(message.createdAt)}
+                    </span>
+
+                    {isOwnMessage && (
+                      <>
+                        {message.status === "sent" && (
                           <Check size={13} className="opacity-70" />
-                        ))}
-                    </div>
+                        )}
+
+                        {message.status === "delivered" && (
+                          <CheckCheck size={13} className="opacity-70" />
+                        )}
+
+                        {message.status === "seen" && (
+                          <CheckCheck size={13} className="text-blue-400" />
+                        )}
+                      </>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
           );
         })}
       </div>
 
-      <MessageInput />
+      <MessageInput
+        replyingMessage={replyingMessage}
+        setReplyingMessage={setReplyingMessage}
+      />
 
-      {/* IMAGE MODAL */}
+      {contextMenu && (
+        <div
+          className="fixed z-[1000] bg-white dark:bg-gray-800 shadow-2xl rounded-xl py-2 w-44 border"
+          style={{
+            top: contextMenu.y,
+            left: contextMenu.x,
+            transform: "translateY(-10px)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => handleReply(contextMenu.message)}
+            className="flex items-center gap-3 w-full px-4 py-2 text-sm text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
+          >
+            <Reply size={16} /> Reply
+          </button>
+
+          {String(contextMenu.message.senderId) === String(authUser._id) &&
+            !contextMenu.message.isDeletedForEveryone && (
+              <button
+                className="flex items-center gap-3 w-full px-4 py-2 text-sm text-blue-500"
+                onClick={() => handleEditInitiate(contextMenu.message)}
+              >
+                <Edit3 size={16} /> Edit
+              </button>
+            )}
+
+          <button
+            className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-500"
+            onClick={() => {
+              setDeleteModal(contextMenu.message);
+              setContextMenu(null);
+            }}
+          >
+            <Trash2 size={16} /> Delete
+          </button>
+        </div>
+      )}
+
+      {deleteModal &&
+        createPortal(
+          <div className="fixed inset-0 z-[1001] bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 rounded-2xl p-6 max-w-sm w-full shadow-xl border border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold mb-2 dark:text-white">
+                Delete message
+              </h3>
+
+              <p className="text-sm opacity-70 mb-4">
+                This message will be deleted permanently.
+              </p>
+
+              {String(deleteModal.senderId) === String(authUser._id) &&
+                !deleteModal.isDeletedForEveryone && (
+                  <label className="flex items-center gap-2 text-sm mb-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={deleteForEveryone}
+                      onChange={(e) => setDeleteForEveryone(e.target.checked)}
+                    />
+                    Delete for everyone
+                  </label>
+                )}
+
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setDeleteModal(null)}
+                  className="px-3 py-1 text-sm rounded bg-gray-200 dark:bg-gray-700"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={confirmDelete}
+                  className="px-3 py-1 text-sm rounded bg-red-500 text-white"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
       {openImage &&
         createPortal(
           <div
-            className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center"
+            className="fixed inset-0 bg-black/90 flex items-center justify-center"
             onClick={() => setOpenImage(null)}
           >
             <img
               src={openImage}
-              alt="Full View"
-              className="max-w-[95%] max-h-[95%] object-contain rounded-lg"
-              onClick={(e) => e.stopPropagation()}
+              className="max-w-[95%] max-h-[95%] object-contain"
             />
-
-            <button
-              onClick={() => setOpenImage(null)}
-              className="absolute top-5 right-5 text-white"
-            >
-              <X size={26} />
-            </button>
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );
