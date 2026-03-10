@@ -16,16 +16,62 @@ const messageSchema = new mongoose.Schema(
 
     text: {
       type: String,
+      default: "",
     },
 
     image: {
       type: String,
+      default: "",
+    },
+
+    replyTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
+
+    replyPreview: {
+      text: {
+        type: String,
+        default: "",
+      },
+      senderId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    },
+
+    status: {
+      type: String,
+      enum: ["sent", "delivered", "seen"],
+      default: "sent",
     },
 
     seen: {
       type: Boolean,
       default: false,
     },
+
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
+
+    editedAt: {
+      type: Date,
+    },
+
+    isDeletedForEveryone: {
+      type: Boolean,
+      default: false,
+    },
+
+    deletedBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   { timestamps: true },
 );
