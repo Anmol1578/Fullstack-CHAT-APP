@@ -57,8 +57,26 @@ io.on("connection", async (socket) => {
       });
     }
 
+    // TYPING INDICATOR FEATURE
+
+    socket.on("typing", ({ senderId, receiverId }) => {
+      const receiverSocketId = getReceiverSocketId(receiverId);
+
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("userTyping", { senderId });
+      }
+    });
+
+    socket.on("stopTyping", ({ senderId, receiverId }) => {
+      const receiverSocketId = getReceiverSocketId(receiverId);
+
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("userStopTyping", { senderId });
+      }
+    });
 
     // EDIT MESSAGE
+
     socket.on("editMessage", async ({ messageId, newText, receiverId }) => {
       try {
         if (!newText || !newText.trim()) return;
@@ -89,6 +107,7 @@ io.on("connection", async (socket) => {
     });
 
     // DELETE FOR EVERYONE
+
     socket.on("deleteForEveryone", async ({ messageId, receiverId }) => {
       try {
         const message = await Message.findById(messageId);
@@ -114,8 +133,8 @@ io.on("connection", async (socket) => {
       }
     });
 
-   
     // DELETE FOR ME
+
     socket.on("deleteForMe", async ({ messageId }) => {
       try {
         const message = await Message.findById(messageId);
@@ -131,7 +150,6 @@ io.on("connection", async (socket) => {
       }
     });
 
-    
     // MARK AS SEEN
     socket.on("markMessagesSeen", async ({ senderId }) => {
       try {
