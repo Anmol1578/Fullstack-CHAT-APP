@@ -10,13 +10,15 @@ const MessageInput = ({ replyingMessage, setReplyingMessage }) => {
   const [imagePreview, setImagePreview] = useState(null);
   const [isImageOpen, setIsImageOpen] = useState(false);
 
+  const typingTimeoutRef = useRef(null);
+
   const fileInputRef = useRef(null);
   const textInputRef = useRef(null);
 
   const { sendMessage, editingMessage, setEditingMessage, selectedUser } =
     useChatStore();
 
-  const { socket } = useAuthStore();
+  const { socket, authUser } = useAuthStore();
 
   // POPULATE INPUT WHEN EDITING
   useEffect(() => {
@@ -58,7 +60,6 @@ const MessageInput = ({ replyingMessage, setReplyingMessage }) => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  
   // ENTER KEY SEND SUPPORT
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -67,6 +68,27 @@ const MessageInput = ({ replyingMessage, setReplyingMessage }) => {
     }
   };
 
+  // TYPING INDICATOR EMIT
+
+  const handleTyping = (value) => {
+    setText(value);
+
+    if (!socket || !selectedUser?._id) return;
+
+    socket.emit("typing", {
+      senderId: authUser._id,
+      receiverId: selectedUser._id,
+    });
+
+    clearTimeout(typingTimeoutRef.current);
+
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit("stopTyping", {
+        senderId: authUser._id,
+        receiverId: selectedUser._id,
+      });
+    }, 1200);
+  };
 
   // SEND OR EDIT MESSAGE
   const handleSendMessage = async (e) => {
@@ -81,7 +103,12 @@ const MessageInput = ({ replyingMessage, setReplyingMessage }) => {
       return;
     }
 
-   
+    // stop typing when message sent
+    socket?.emit("stopTyping", {
+      senderId: authUser._id,
+      receiverId: selectedUser._id,
+    });
+
     // EDIT MESSAGE
     if (editingMessage) {
       if (!trimmedText) {
@@ -115,7 +142,7 @@ const MessageInput = ({ replyingMessage, setReplyingMessage }) => {
       image: messageImage,
     };
 
-    // ===== REPLY SUPPORT =====
+    //  REPLY SUPPORT
     if (replyingMessage) {
       payload.replyTo = replyingMessage._id;
 
@@ -244,7 +271,7 @@ const MessageInput = ({ replyingMessage, setReplyingMessage }) => {
           className="flex-1 input input-bordered rounded-xl text-sm md:text-base"
           placeholder={editingMessage ? "Save changes..." : "Type a message..."}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => handleTyping(e.target.value)}
           onKeyDown={handleKeyDown}
         />
 
