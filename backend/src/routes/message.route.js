@@ -1,19 +1,32 @@
 import express from "express";
 import { protectRoute } from "../middleware/auth.middleware.js";
+
 import {
   getUsersForSidebar,
-  getMessages, // make sure this is exported from message.controller.js
+  getMessages,
   sendMessage,
+  deleteConversation,
 } from "../controllers/message.controller.js";
 
 const router = express.Router();
 
+//  GET USERS FOR SIDEBAR
+
 router.get("/users", protectRoute, getUsersForSidebar);
 
-// Use getMessages for getting chat with a specific user
+//   GET MESSAGES WITH A SPECIFIC USER
+//  /api/messages/:id
+
 router.get("/:id", protectRoute, getMessages);
 
-// Send a message
+//  SEND MESSAGE
+//  /api/messages/send/:id
+
 router.post("/send/:id", protectRoute, sendMessage);
+
+//  DELETE CONVERSATION WITH A USER
+//  /api/messages/conversation/:id
+
+router.delete("/conversation/:id", protectRoute, deleteConversation);
 
 export default router;
