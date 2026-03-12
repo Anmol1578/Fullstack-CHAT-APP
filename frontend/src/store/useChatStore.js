@@ -14,7 +14,8 @@ export const useChatStore = create((set, get) => ({
   isMessagesLoading: false,
   editingMessage: null,
 
-  // GET USERS
+  /* GET USERS */
+
   getUsers: async () => {
     set({ isUsersLoading: true });
 
@@ -28,10 +29,9 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  // GET MESSAGES (FAST WITH CACHE)
+  /* GET MESSAGES (CACHE OPTIMIZED)*/
 
   getMessages: async (userId) => {
-    // show cached messages instantly
     if (messageCache[userId]) {
       set({ messages: messageCache[userId] });
     }
@@ -41,7 +41,6 @@ export const useChatStore = create((set, get) => ({
     try {
       const res = await axiosInstance.get(`/messages/${userId}`);
 
-      // save in cache
       messageCache[userId] = res.data;
 
       set({ messages: res.data });
@@ -52,7 +51,8 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  // SEND MESSAGE
+  /* SEND MESSAGE */
+
   sendMessage: async (messageData) => {
     const { selectedUser } = get();
 
@@ -62,12 +62,10 @@ export const useChatStore = create((set, get) => ({
         messageData,
       );
 
-      // instant UI update
       set((state) => ({
         messages: [...state.messages, res.data],
       }));
 
-      // update cache
       if (messageCache[selectedUser._id]) {
         messageCache[selectedUser._id].push(res.data);
       }
@@ -77,9 +75,32 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  /* DELETE CONVERSATION */
+
+  deleteConversation: async (deleteForBoth = false) => {
+    const { selectedUser } = get();
+
+    try {
+      await axiosInstance.delete(`/messages/conversation/${selectedUser._id}`, {
+        data: { deleteForBoth },
+      });
+
+      // instant UI update
+      set({ messages: [] });
+
+      // clear cache
+      delete messageCache[selectedUser._id];
+
+      toast.success("Chat history cleared");
+    } catch (error) {
+      toast.error("Failed to delete conversation");
+    }
+  },
+
   setEditingMessage: (message) => set({ editingMessage: message }),
 
-  // SOCKET SUBSCRIPTIONS
+  /* SOCKET SUBSCRIPTIONS */
+
   subscribeToMessages: () => {
     const { selectedUser } = get();
     if (!selectedUser) return;
@@ -91,7 +112,8 @@ export const useChatStore = create((set, get) => ({
 
     get().unsubscribeFromMessages();
 
-    // NEW MESSAGE
+    /* NEW MESSAGE */
+
     socket.on("newMessage", (newMessage) => {
       const isRelevant =
         newMessage.senderId.toString() === selectedUser._id.toString() ||
@@ -107,7 +129,6 @@ export const useChatStore = create((set, get) => ({
         messages: [...state.messages, newMessage],
       }));
 
-      // update cache
       if (messageCache[selectedUser._id]) {
         messageCache[selectedUser._id].push(newMessage);
       } else {
@@ -115,7 +136,8 @@ export const useChatStore = create((set, get) => ({
       }
     });
 
-    // EDIT MESSAGE
+    /* EDIT MESSAGE */
+
     socket.on("messageUpdated", (updatedMsg) => {
       set((state) => ({
         messages: state.messages.map((m) =>
@@ -124,7 +146,8 @@ export const useChatStore = create((set, get) => ({
       }));
     });
 
-    // DELETE FOR EVERYONE
+    /* DELETE FOR EVERYONE */
+
     socket.on("messageDeletedGlobally", (messageId) => {
       set((state) => ({
         messages: state.messages.map((m) =>
@@ -140,14 +163,16 @@ export const useChatStore = create((set, get) => ({
       }));
     });
 
-    // DELETE FOR ME
+    /* DELETE FOR ME */
+
     socket.on("messageHiddenLocally", (messageId) => {
       set((state) => ({
         messages: state.messages.filter((m) => m._id !== messageId),
       }));
     });
 
-    // SEEN STATUS
+    /* SEEN STATUS */
+
     socket.on("messagesSeen", ({ senderId }) => {
       if (senderId.toString() !== selectedUser._id.toString()) return;
 
@@ -159,9 +184,27 @@ export const useChatStore = create((set, get) => ({
         ),
       }));
     });
+
+    socket.on("conversationDeleted", ({ senderId, receiverId }) => {
+      const { selectedUser } = get();
+      const authUser = useAuthStore.getState().authUser;
+
+      if (!selectedUser) return;
+
+      const isConversation =
+        (senderId === authUser._id && receiverId === selectedUser._id) ||
+        (senderId === selectedUser._id && receiverId === authUser._id);
+
+      if (!isConversation) return;
+
+      set({ messages: [] });
+
+      delete messageCache[selectedUser._id];
+    });
   },
 
-  // UNSUBSCRIBE
+  /* UNSUBSCRIBE*/
+
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
@@ -171,6 +214,7 @@ export const useChatStore = create((set, get) => ({
     socket.off("messageDeletedGlobally");
     socket.off("messageHiddenLocally");
     socket.off("messagesSeen");
+    socket.off("conversationDeleted");
   },
 
   setSelectedUser: (selectedUser) => set({ selectedUser }),
