@@ -3,47 +3,44 @@ import Message from "../models/message.model.js";
 import cloudinary from "../lib/cloudinary.js";
 import { getReceiverSocketId, io } from "../lib/socket.js";
 
-// SIDEBAR USERS
+//  GET USERS FOR SIDEBAR
 
 export const getUsersForSidebar = async (req, res) => {
   try {
     const loggedInUserId = req.user._id;
 
-    const filteredUsers = await User.find({
+    const users = await User.find({
       _id: { $ne: loggedInUserId },
     }).select("-password");
 
-    res.status(200).json(filteredUsers);
+    res.status(200).json(users);
   } catch (error) {
-    console.error("Error in getUsersForSidebar:", error.message);
+    console.error("getUsersForSidebar error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
-// GET MESSAGES
+//  GET MESSAGES
 
 export const getMessages = async (req, res) => {
   try {
-    const { id: userToChatId } = req.params;
+    const { id: otherUserId } = req.params;
     const myId = req.user._id;
 
-    // mark messages as seen
+    // mark unseen messages as seen
     await Message.updateMany(
       {
-        senderId: userToChatId,
+        senderId: otherUserId,
         receiverId: myId,
         seen: false,
       },
       {
-        $set: {
-          seen: true,
-          status: "seen",
-        },
+        $set: { seen: true, status: "seen" },
       },
     );
 
-    // notify sender that messages were seen
-    const senderSocketId = getReceiverSocketId(userToChatId);
+    // notify sender about seen
+    const senderSocketId = getReceiverSocketId(otherUserId);
 
     if (senderSocketId) {
       io.to(senderSocketId).emit("messagesSeen", {
@@ -56,22 +53,24 @@ export const getMessages = async (req, res) => {
       $and: [
         {
           $or: [
-            { senderId: myId, receiverId: userToChatId },
-            { senderId: userToChatId, receiverId: myId },
+            { senderId: myId, receiverId: otherUserId },
+            { senderId: otherUserId, receiverId: myId },
           ],
         },
         {
-          deletedBy: { $ne: myId }, // delete for me filter
+          deletedBy: { $ne: myId },
         },
       ],
     }).sort({ createdAt: 1 });
 
     res.status(200).json(messages);
   } catch (error) {
-    console.log("Error in getMessages:", error.message);
+    console.error("getMessages error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+//  SEND MESSAGE
 
 export const sendMessage = async (req, res) => {
   try {
@@ -87,24 +86,20 @@ export const sendMessage = async (req, res) => {
 
     let imageUrl;
 
-    // upload image
     if (image) {
-      const uploadResponse = await cloudinary.uploader.upload(image, {
+      const upload = await cloudinary.uploader.upload(image, {
         folder: "chat-app",
       });
 
-      imageUrl = uploadResponse.secure_url;
+      imageUrl = upload.secure_url;
     }
 
-    // create message
     const newMessage = new Message({
       senderId,
       receiverId,
       text,
       image: imageUrl,
       status: "sent",
-
-      // ✅ CORRECT REPLY STRUCTURE
       replyTo: replyTo || null,
       replyPreview: replyPreview || null,
     });
@@ -113,7 +108,7 @@ export const sendMessage = async (req, res) => {
 
     const receiverSocketId = getReceiverSocketId(receiverId);
 
-    // if receiver online → delivered
+    // mark delivered if user online
     if (receiverSocketId) {
       newMessage.status = "delivered";
       await newMessage.save();
@@ -123,7 +118,79 @@ export const sendMessage = async (req, res) => {
 
     res.status(201).json(newMessage);
   } catch (error) {
-    console.log("Error in sendMessage:", error.message);
+    console.error("sendMessage error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+//  DELETE CONVERSATION
+//  Telegram Style
+
+export const deleteConversation = async (req, res) => {
+  try {
+    const { id: otherUserId } = req.params;
+    const { deleteForBoth } = req.body;
+    const myId = req.user._id;
+
+    const mySocketId = getReceiverSocketId(myId);
+    const receiverSocketId = getReceiverSocketId(otherUserId);
+
+    /* DELETE FOR BOTH USERS */
+    if (deleteForBoth) {
+      await Message.deleteMany({
+        $or: [
+          { senderId: myId, receiverId: otherUserId },
+          { senderId: otherUserId, receiverId: myId },
+        ],
+      });
+
+      const mySocketId = getReceiverSocketId(myId);
+      const receiverSocketId = getReceiverSocketId(otherUserId);
+
+      const payload = {
+        senderId: myId,
+        receiverId: otherUserId,
+      };
+
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("conversationDeleted", payload);
+      }
+
+      if (mySocketId) {
+        io.to(mySocketId).emit("conversationDeleted", payload);
+      }
+
+      return res.status(200).json({
+        message: "Conversation deleted for both users",
+      });
+    }
+
+    /* DELETE ONLY FOR ME */
+
+    await Message.updateMany(
+      {
+        $or: [
+          { senderId: myId, receiverId: otherUserId },
+          { senderId: otherUserId, receiverId: myId },
+        ],
+      },
+      {
+        $addToSet: { deletedBy: myId },
+      },
+    );
+
+    // 🔥 emit only to current user
+    if (mySocketId) {
+      io.to(mySocketId).emit("conversationDeleted", {
+        userId: otherUserId,
+      });
+    }
+
+    res.status(200).json({
+      message: "Conversation cleared for you",
+    });
+  } catch (error) {
+    console.error("deleteConversation error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
