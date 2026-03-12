@@ -17,6 +17,7 @@ const messageSchema = new mongoose.Schema(
     text: {
       type: String,
       default: "",
+      trim: true,
     },
 
     image: {
@@ -24,6 +25,7 @@ const messageSchema = new mongoose.Schema(
       default: "",
     },
 
+    // reply system
     replyTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Message",
@@ -41,6 +43,7 @@ const messageSchema = new mongoose.Schema(
       },
     },
 
+    // message delivery status
     status: {
       type: String,
       enum: ["sent", "delivered", "seen"],
@@ -52,6 +55,7 @@ const messageSchema = new mongoose.Schema(
       default: false,
     },
 
+    // message editing
     isEdited: {
       type: Boolean,
       default: false,
@@ -59,13 +63,16 @@ const messageSchema = new mongoose.Schema(
 
     editedAt: {
       type: Date,
+      default: null,
     },
 
+    // delete for everyone
     isDeletedForEveryone: {
       type: Boolean,
       default: false,
     },
 
+    // delete for me
     deletedBy: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -73,8 +80,13 @@ const messageSchema = new mongoose.Schema(
       },
     ],
   },
-  { timestamps: true },
+  {
+    timestamps: true,
+  },
 );
+
+// index for faster chat queries
+messageSchema.index({ senderId: 1, receiverId: 1, createdAt: 1 });
 
 const Message = mongoose.model("Message", messageSchema);
 
