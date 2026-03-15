@@ -180,20 +180,20 @@ const MessageInput = ({ replyingMessage, setReplyingMessage }) => {
     <div className="p-3 md:p-4 w-full bg-base-100 border-t border-base-300">
       {/* REPLY PREVIEW */}
       {replyingMessage && (
-        <div className="flex items-center justify-between bg-blue-500/10 p-2 px-3 rounded-xl border-l-4 border-blue-500 mb-2">
-          <div className="overflow-hidden">
+        <div className="flex items-start justify-between bg-blue-500/10 p-2 px-3 rounded-xl border-l-4 border-blue-500 mb-2 max-w-full overflow-hidden">
+          <div className="overflow-hidden flex-1">
             <p className="text-[10px] uppercase font-bold text-blue-500">
               Replying
             </p>
 
-            <p className="text-xs truncate opacity-70 italic">
+            <p className="text-xs break-all line-clamp-2 opacity-70 italic">
               {replyingMessage.text || "📷 Photo"}
             </p>
           </div>
 
           <button
             onClick={() => setReplyingMessage(null)}
-            className="p-1.5 hover:bg-base-300 rounded-full"
+            className="ml-2 p-1.5 hover:bg-base-300 rounded-full shrink-0"
           >
             <X size={16} />
           </button>
