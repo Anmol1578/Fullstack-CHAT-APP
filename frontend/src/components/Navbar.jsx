@@ -10,17 +10,43 @@ const Navbar = () => {
       className="bg-base-100 border-b border-base-300 fixed w-full top-0 z-40 
     backdrop-blur-lg bg-base-100/80"
     >
-      <div className="container mx-auto px-4 h-16">
+      <div className="container mx-auto pl-18 pr-4 h-16">
         <div className="flex items-center justify-between h-full">
           <div className="flex items-center gap-8">
-            <Link
+  <Link
               to="/"
-              className="flex items-center gap-2.5 hover:opacity-80 transition-all"
+              className="flex items-center gap-2.5 group transition-all"
             >
-              <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                <MessageSquare className="w-5 h-5 text-primary" />
+              {/* MAIN LOGO BOX */}
+              <div
+                className="
+    relative overflow-hidden
+    flex items-center justify-center
+    px-3 h-9 rounded-lg
+    bg-primary/10
+    border-2 border-primary/40
+    shadow-lg shadow-primary/60
+    transition-all duration-300
+    group-hover:shadow-primary/70
+    "
+              >
+                {/* SHINE EFFECT */}
+                <span
+                  className="
+      absolute inset-0 opacity-0
+      bg-gradient-to-r
+      from-transparent via-base-100/40 to-transparent
+      group-hover:opacity-100
+      group-hover:translate-x-full
+      transition-all duration-700
+      "
+                ></span>
+
+                {/* TEXT */}
+                <span className="relative text-primary font-bold text-sm tracking-wide">
+                  Z-CHAT
+                </span>
               </div>
-              <h1 className="text-lg font-bold">Z-CHAT</h1>
             </Link>
           </div>
 
