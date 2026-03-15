@@ -166,7 +166,9 @@ transition-all duration-200
                     />
 
                     {isOnline && (
-                      <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-success ring-2 ring-base-100"></span>
+                    <span className="absolute bottom-0 right-0 flex h-3 w-3">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping"></span>
+                    <span className="relative inline-flex h-3 w-3 rounded-full bg-green-500 border-2 border-base-100"></span>
                     )}
                   </div>
 
@@ -179,7 +181,15 @@ transition-all duration-200
                     {typingUsers[user._id] ? (
                       <span className="loading loading-dots loading-xs text-primary"></span>
                     ) : (
-                      <span className="text-xs opacity-60 truncate">
+                    <span
+                        className={`text-xs truncate ${
+                          user.lastMessage
+                            ? "opacity-60"
+                            : isOnline
+                              ? "text-green-500 font-medium"
+                              : "text-gray-400"
+                        }`}
+                      >
                         {user.lastMessage || (isOnline ? "Online" : "Offline")}
                       </span>
                     )}
