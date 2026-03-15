@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, CheckCheck, Trash2, Edit3, Reply } from "lucide-react";
@@ -209,8 +210,9 @@ const ChatContainer = () => {
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3"
       >
-        {messages.slice(-60).map((message) => {
-          const isOwnMessage = String(message.senderId) === String(authUser._id);
+        {messages.slice(-40).map((message) => {
+          const isOwnMessage =
+            String(message.senderId) === String(authUser._id);
 
           return (
             <div
@@ -230,7 +232,7 @@ const ChatContainer = () => {
                 )}
 
                 <div
-                  className={`px-3 py-2 mt-1 break-words rounded-2xl shadow-sm select-none ${
+                  className={`px-3 py-2 mt-1 break-words break-all whitespace-pre-wrap rounded-2xl shadow-sm select-none max-w-full ${
                     isOwnMessage
                       ? "bg-primary text-primary-content rounded-br-none"
                       : "bg-base-200 text-base-content rounded-bl-none"
@@ -250,9 +252,11 @@ const ChatContainer = () => {
                   ) : (
                     <>
                       {message.replyPreview && (
-                        <div className="border-l-4 border-blue-400 pl-2 mb-1 text-xs opacity-80">
+                        <div className="border-l-4 border-blue-400 pl-2 mb-1 text-xs opacity-80 max-w-full overflow-hidden">
                           <p className="font-semibold text-blue-400">Reply</p>
-                          <p className="truncate">{message.replyPreview.text}</p>
+                          <p className="line-clamp-2 break-words">
+                            {message.replyPreview.text}
+                          </p>
                         </div>
                       )}
 
@@ -262,7 +266,9 @@ const ChatContainer = () => {
 
                   <div className="flex justify-end items-center mt-1 gap-1">
                     {message.isEdited && !message.isDeletedForEveryone && (
-                      <span className="text-[9px] opacity-60 mr-1">(edited)</span>
+                      <span className="text-[9px] opacity-60 mr-1">
+                        (edited)
+                      </span>
                     )}
 
                     <span className="text-[10px] opacity-70">
@@ -271,9 +277,15 @@ const ChatContainer = () => {
 
                     {isOwnMessage && (
                       <>
-                        {message.status === "sent" && <Check size={13} className="opacity-70" />}
-                        {message.status === "delivered" && <CheckCheck size={13} className="opacity-70" />}
-                        {message.status === "seen" && <CheckCheck size={13} className="text-blue-400" />}
+                        {message.status === "sent" && (
+                          <Check size={13} className="opacity-70" />
+                        )}
+                        {message.status === "delivered" && (
+                          <CheckCheck size={13} className="opacity-70" />
+                        )}
+                        {message.status === "seen" && (
+                          <CheckCheck size={13} className="text-blue-400" />
+                        )}
                       </>
                     )}
                   </div>
@@ -284,7 +296,10 @@ const ChatContainer = () => {
         })}
       </div>
 
-      <MessageInput replyingMessage={replyingMessage} setReplyingMessage={setReplyingMessage} />
+      <MessageInput
+        replyingMessage={replyingMessage}
+        setReplyingMessage={setReplyingMessage}
+      />
 
       {/* Context Menu */}
       {contextMenu && (
@@ -331,9 +346,13 @@ const ChatContainer = () => {
         createPortal(
           <div className="fixed inset-0 z-[1001] bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 rounded-2xl p-6 max-w-sm w-full shadow-xl border border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold mb-2 dark:text-white">Delete message</h3>
+              <h3 className="text-lg font-semibold mb-2 dark:text-white">
+                Delete message
+              </h3>
 
-              <p className="text-sm opacity-70 mb-4">This message will be deleted permanently.</p>
+              <p className="text-sm opacity-70 mb-4">
+                This message will be deleted permanently.
+              </p>
 
               {String(deleteModal.senderId) === String(authUser._id) &&
                 !deleteModal.isDeletedForEveryone && (
@@ -364,7 +383,7 @@ const ChatContainer = () => {
               </div>
             </div>
           </div>,
-          document.body
+          document.body,
         )}
 
       {/* Image Viewer */}
@@ -374,9 +393,12 @@ const ChatContainer = () => {
             className="fixed inset-0 bg-black/90 flex items-center justify-center"
             onClick={() => setOpenImage(null)}
           >
-            <img src={openImage} className="max-w-[95%] max-h-[95%] object-contain" />
+            <img
+              src={openImage}
+              className="max-w-[95%] max-h-[95%] object-contain"
+            />
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );
