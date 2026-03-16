@@ -264,14 +264,8 @@ const SettingsPage = () => {
               This will permanently delete all your chat history.
             </p>
 
-            <div className="modal-action">
-              {/* Cancel button */}
-              <button className="btn" onClick={() => setShowClearModal(false)}>
-                Cancel
-              </button>
-
+               <div className="modal-action flex-col sm:flex-row">
               {/* Confirm clear chats */}
-
               <button
                 className="btn btn-error w-full sm:w-auto"
                 disabled={isClearing}
@@ -285,6 +279,10 @@ const SettingsPage = () => {
                 ) : (
                   "Clear Chats"
                 )}
+                {/* Cancel button */}
+              </button>
+              <button className="btn" onClick={() => setShowClearModal(false)}>
+                Cancel
               </button>
             </div>
           </div>
