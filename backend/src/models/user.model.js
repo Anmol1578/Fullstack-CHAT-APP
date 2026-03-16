@@ -1,3 +1,4 @@
+
 import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
@@ -13,6 +14,14 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
 
+    username: {
+      type: String,
+      unique: true,
+      sparse: true, // allows users without username
+      lowercase: true,
+      trim: true,
+    },
+
     password: {
       type: String,
       required: true,
@@ -26,7 +35,7 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 const User = mongoose.model("User", userSchema);
