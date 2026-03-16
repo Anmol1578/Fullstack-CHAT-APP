@@ -1,72 +1,119 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
-import { Camera, Mail, User, X } from "lucide-react";
+import { Camera, Mail, User, X, Pencil } from "lucide-react";
 
 const ProfilePage = () => {
-  const { authUser, isUpdatingProfile, updateProfile } = useAuthStore();
+  const { authUser, isUpdatingProfile, updateProfile, checkUsername } =
+    useAuthStore();
+
   const [selectedImg, setSelectedImg] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+
+  const [name, setName] = useState(authUser?.fullName || "");
+  const [username, setUsername] = useState(authUser?.username || "");
+  const [usernameStatus, setUsernameStatus] = useState("");
+
   const navigate = useNavigate();
 
   const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.readAsDataURL(file);
 
-    reader.onload = async () => {
+    reader.onloadend = async () => {
       const base64Image = reader.result;
       setSelectedImg(base64Image);
       await updateProfile({ profilePic: base64Image });
     };
+
+    reader.readAsDataURL(file);
+  };
+
+  // username availability check
+  const handleUsernameChange = async (value) => {
+    setUsername(value);
+
+    // don't check small usernames
+    if (value.length < 3) {
+      setUsernameStatus("");
+      return;
+    }
+
+    // if same as current username
+    if (value === authUser.username) {
+      setUsernameStatus("");
+      return;
+    }
+
+    const res = await checkUsername(value);
+
+    if (res?.available) {
+      setUsernameStatus("available");
+    } else {
+      setUsernameStatus("taken");
+    }
+  };
+
+  const handleProfileUpdate = async () => {
+    const updatedUser = await updateProfile({
+      fullName: name,
+      username: username,
+    });
+
+    if (updatedUser) {
+      setName(updatedUser.fullName);
+      setUsername(updatedUser.username);
+    }
+
+    setShowEditModal(false);
+  };
+
+  // OPEN MODAL (RESET VALUES FROM DATABASE)
+  const openEditModal = () => {
+    setName(authUser.fullName);
+    setUsername(authUser.username || "");
+    setUsernameStatus("");
+    setShowEditModal(true);
+  };
+
+  // CLOSE MODAL (RESET INPUTS)
+  const closeEditModal = () => {
+    setName(authUser.fullName);
+    setUsername(authUser.username || "");
+    setUsernameStatus("");
+    setShowEditModal(false);
   };
 
   return (
     <>
-      {/* Close Button */}
       <button
         onClick={() => navigate("/")}
-        className="fixed top-18 right-4 sm:top-6 sm:right-6 z-50 text-base-content hover:text-error transition"
+        className="fixed top-20 right-4 sm:top-6 sm:right-6 z-50 text-base-content hover:text-error"
       >
         <X size={24} />
       </button>
 
-      <div className="h-screen pt-20">
-        <div className="max-w-2xl mx-auto p-4 py-8">
-          <div className="bg-base-300 rounded-xl p-6 space-y-8">
-            
-            {/* Header */}
-            <div className="text-center">
-              <h1 className="text-2xl font-semibold">Profile</h1>
-              <p className="mt-2">Your profile information</p>
-            </div>
+      <div className="min-h-screen pt-20 px-4 bg-base-100">
+        <div className="max-w-2xl mx-auto space-y-6">
+          {/* PROFILE HEADER */}
+          <div className="bg-base-200/70 backdrop-blur-lg rounded-2xl overflow-hidden shadow-lg border border-base-300">
+            <div className="h-36 bg-gradient-to-r from-primary/70 via-secondary/60 to-accent/60"></div>
 
-            {/* Avatar Upload */}
-            <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-col items-center -mt-16 pb-6 px-6">
               <div className="relative">
                 <img
-                  src={selectedImg || authUser?.profilePic || "/avatar.png"}
+                  src={selectedImg || authUser.profilePic || "/avatar.png"}
                   alt="Profile"
-                  className="size-32 rounded-full object-cover border-4"
+                  className="w-32 h-32 rounded-full object-cover border-4 border-base-100 shadow-lg"
                 />
 
                 <label
                   htmlFor="avatar-upload"
-                  className={`
-                    absolute bottom-0 right-0
-                    bg-base-content hover:scale-105
-                    p-2 rounded-full cursor-pointer
-                    transition-all duration-200
-                    ${
-                      isUpdatingProfile
-                        ? "animate-pulse pointer-events-none"
-                        : ""
-                    }
-                  `}
+                  className="absolute bottom-1 right-1 bg-primary text-primary-content p-2 rounded-full cursor-pointer"
                 >
-                  <Camera className="w-5 h-5 text-base-200" />
+                  <Camera size={18} />
 
                   <input
                     type="file"
@@ -79,62 +126,126 @@ const ProfilePage = () => {
                 </label>
               </div>
 
-              <p className="text-sm text-zinc-400">
-                {isUpdatingProfile
-                  ? "Uploading..."
-                  : "Click the camera icon to update your photo"}
-              </p>
-            </div>
+              <div className="text-center mt-4">
+                <h2 className="text-xl font-semibold">{authUser.fullName}</h2>
 
-            {/* User Info */}
-            <div className="space-y-6">
-              <div className="space-y-1.5">
-                <div className="text-sm text-zinc-400 flex items-center gap-2">
-                  <User className="w-4 h-4" />
-                  Full Name
-                </div>
-
-                <p className="px-4 py-2.5 bg-base-200 rounded-lg border">
-                  {authUser?.fullName}
+                <p className="text-sm text-primary font-medium">
+                  @{authUser.username || "username"}
                 </p>
+
+                <p className="text-sm opacity-60">{authUser.email}</p>
               </div>
 
-              <div className="space-y-1.5">
-                <div className="text-sm text-zinc-400 flex items-center gap-2">
-                  <Mail className="w-4 h-4" />
-                  Email Address
-                </div>
+              <button
+                onClick={openEditModal}
+                className="btn btn-sm btn-outline mt-3 flex items-center gap-2"
+              >
+                <Pencil size={16} />
+                Edit Profile
+              </button>
+            </div>
+          </div>
 
-                <p className="px-4 py-2.5 bg-base-200 rounded-lg border">
-                  {authUser?.email}
-                </p>
-              </div>
+          {/* PERSONAL INFO */}
+          <div className="bg-base-200/70 backdrop-blur-lg rounded-xl p-6 shadow border border-base-300 space-y-4">
+            <h3 className="text-lg font-semibold">Personal Information</h3>
+
+            <div className="flex justify-between border-b border-base-300 pb-3">
+              <span className="flex items-center gap-2 text-sm opacity-70">
+                <User size={16} />
+                Full Name
+              </span>
+
+              <span className="font-medium">{authUser.fullName}</span>
             </div>
 
-            {/* Account Info */}
-            <div className="mt-6 bg-base-300 rounded-xl p-6">
-              <h2 className="text-lg font-medium mb-4">
-                Account Information
-              </h2>
+            <div className="flex justify-between">
+              <span className="flex items-center gap-2 text-sm opacity-70">
+                <Mail size={16} />
+                Email
+              </span>
 
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between py-2 border-b border-zinc-700">
-                  <span>Member Since</span>
-                  <span>{authUser?.createdAt?.split("T")[0]}</span>
-                </div>
+              <span className="font-medium">{authUser.email}</span>
+            </div>
+          </div>
 
-                <div className="flex items-center justify-between py-2">
-                  <span>Account Status</span>
-                  <span className="text-green-500">Active</span>
-                </div>
+          {/* ACCOUNT INFORMATION */}
+          <div className="bg-base-200/70 backdrop-blur-lg rounded-xl p-6 shadow border border-base-300">
+            <h3 className="text-lg font-semibold mb-4">Account Information</h3>
+
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between border-b border-base-300 pb-3">
+                <span className="opacity-70">Member Since</span>
+
+                <span className="font-medium">
+                  {authUser.createdAt ? authUser.createdAt.split("T")[0] : "—"}
+                </span>
+              </div>
+
+              <div className="flex justify-between">
+                <span className="opacity-70">Account Status</span>
+
+                <span className="text-success font-medium">Active</span>
               </div>
             </div>
-
           </div>
         </div>
       </div>
+
+      {/* EDIT PROFILE MODAL */}
+      {showEditModal && (
+        <dialog className="modal modal-open">
+          {/* <div className="modal-box"> */}
+          <div className="modal-box w-full max-w-md">
+            <h3 className="font-bold text-lg">Edit Profile</h3>
+
+            <div className="py-4 space-y-3">
+              <input
+                type="text"
+                placeholder="Full Name"
+                className="input input-bordered w-full"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+
+              <input
+                type="text"
+                placeholder="Username"
+                className="input input-bordered w-full"
+                value={username}
+                onChange={(e) => handleUsernameChange(e.target.value)}
+              />
+
+              {usernameStatus === "available" && (
+                <p className="text-success text-sm font-medium">
+                  ✓ Username available
+                </p>
+              )}
+
+              {usernameStatus === "taken" && (
+                <p className="text-error text-sm">Username already taken</p>
+              )}
+            </div>
+
+            <div className="modal-action">
+              <button className="btn" onClick={closeEditModal}>
+                Cancel
+              </button>
+
+              <button
+                className="btn btn-primary"
+                disabled={usernameStatus === "taken" || isUpdatingProfile}
+                onClick={handleProfileUpdate}
+              >
+                {isUpdatingProfile ? "Saving Changes..." : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </dialog>
+      )}
     </>
   );
 };
 
 export default ProfilePage;
+
