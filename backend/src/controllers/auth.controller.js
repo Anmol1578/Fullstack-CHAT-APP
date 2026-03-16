@@ -31,28 +31,23 @@ export const signup = async (req, res) => {
   const { fullName, email, password } = req.body;
 
   try {
-    // Validate required fields
     if (!fullName || !email || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Password length validation
     if (password.length < 6) {
       return res
         .status(400)
         .json({ message: "Password must be at least 6 characters" });
     }
 
-    // Check if user already exists with same email
     const user = await User.findOne({ email });
 
     if (user) return res.status(400).json({ message: "Email already exists" });
 
-    // Generate salt and hash password for security
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create new user document
     const newUser = new User({
       fullName,
       email,
@@ -60,21 +55,18 @@ export const signup = async (req, res) => {
     });
 
     if (newUser) {
-      // Generate JWT token and store in HTTP-only cookie
       generateToken(newUser._id, res);
 
-      // Save user to database
       await newUser.save();
 
-      // Send user data back to client (excluding password)
       res.status(201).json({
         _id: newUser._id,
         fullName: newUser.fullName,
         email: newUser.email,
         profilePic: newUser.profilePic,
+        username: newUser.username,
       });
     } else {
-      // If user creation fails
       res.status(400).json({ message: "Invalid user data" });
     }
   } catch (error) {
@@ -86,35 +78,30 @@ export const signup = async (req, res) => {
 // =========================================================
 // USER LOGIN CONTROLLER
 // =========================================================
-// Authenticates user credentials and returns user data
 export const login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // Find user by email
     const user = await User.findOne({ email });
 
-    // If user does not exist
     if (!user) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // Compare provided password with hashed password in database
     const isPasswordCorrect = await bcrypt.compare(password, user.password);
 
     if (!isPasswordCorrect) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // Generate JWT token and store it in cookies
     generateToken(user._id, res);
 
-    // Send user data back to frontend
     res.status(200).json({
       _id: user._id,
       fullName: user.fullName,
       email: user.email,
       profilePic: user.profilePic,
+      username: user.username,
     });
   } catch (error) {
     console.log("Error in login controller", error.message);
@@ -125,10 +112,8 @@ export const login = async (req, res) => {
 // =========================================================
 // USER LOGOUT CONTROLLER
 // =========================================================
-// Clears JWT cookie to log the user out
 export const logout = (req, res) => {
   try {
-    // Clear JWT cookie
     res.cookie("jwt", "", { maxAge: 0 });
 
     res.status(200).json({ message: "Logged out successfully" });
@@ -139,33 +124,46 @@ export const logout = (req, res) => {
 };
 
 // =========================================================
-// UPDATE USER PROFILE PICTURE
+// UPDATE USER PROFILE (NAME + USERNAME + PROFILE PIC)
 // =========================================================
-// Uploads profile image to Cloudinary and updates database
 export const updateProfile = async (req, res) => {
   try {
-    // Get profile picture from request body
-    const { profilePic } = req.body;
-
-    // Get authenticated user ID from middleware
+    const { fullName, username, profilePic } = req.body;
     const userId = req.user._id;
 
-    // Validate profile picture input
-    if (!profilePic) {
-      return res.status(400).json({ message: "Profile pic is required" });
+    const updateData = {};
+
+    // update full name
+    if (fullName) {
+      updateData.fullName = fullName;
     }
 
-    // Upload image to Cloudinary
-    const uploadResponse = await cloudinary.uploader.upload(profilePic);
+    // update username
+    if (username) {
+      const existingUser = await User.findOne({
+        username: username.toLowerCase(),
+        _id: { $ne: userId },
+      });
 
-    // Update user's profile picture URL in database
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      { profilePic: uploadResponse.secure_url },
-      { new: true }, // return updated user
-    );
+      if (existingUser) {
+        return res.status(400).json({
+          message: "Username already taken",
+        });
+      }
 
-    // Send updated user data back
+      updateData.username = username.toLowerCase();
+    }
+
+    // update profile picture
+    if (profilePic) {
+      const uploadResponse = await cloudinary.uploader.upload(profilePic);
+      updateData.profilePic = uploadResponse.secure_url;
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
+      new: true,
+    }).select("-password");
+
     res.status(200).json(updatedUser);
   } catch (error) {
     console.log("error in update profile:", error);
@@ -174,12 +172,42 @@ export const updateProfile = async (req, res) => {
 };
 
 // =========================================================
+// CHECK USERNAME AVAILABILITY
+// =========================================================
+export const checkUsername = async (req, res) => {
+  try {
+    const { username } = req.params;
+
+    if (!username || username.length < 3) {
+      return res.json({ available: false });
+    }
+
+    const existingUser = await User.findOne({
+      username: username.toLowerCase(),
+    });
+
+    if (existingUser) {
+      return res.json({
+        available: false,
+        message: "Username already taken",
+      });
+    }
+
+    res.json({
+      available: true,
+      message: "Username available",
+    });
+  } catch (error) {
+    console.log("Error checking username:", error);
+    res.status(500).json({ available: false });
+  }
+};
+
+// =========================================================
 // CHECK AUTHENTICATION
 // =========================================================
-// Returns authenticated user data if JWT is valid
 export const checkAuth = (req, res) => {
   try {
-    // req.user is set by authentication middleware
     res.status(200).json(req.user);
   } catch (error) {
     console.log("Error in checkAuth controller", error.message);
@@ -190,24 +218,18 @@ export const checkAuth = (req, res) => {
 // =========================================================
 // DELETE USER ACCOUNT
 // =========================================================
-// Permanently deletes user account and related messages
 export const deleteAccount = async (req, res) => {
   try {
-    // Get authenticated user ID
     const userId = req.user._id;
 
-    // Delete all messages where user is sender or receiver
     await Message.deleteMany({
       $or: [{ senderId: userId }, { receiverId: userId }],
     });
 
-    // Delete user document from database
     await User.findByIdAndDelete(userId);
 
-    // Clear authentication cookie
     res.clearCookie("jwt");
 
-    // Send success response
     res.status(200).json({ message: "Account deleted successfully" });
   } catch (error) {
     console.error("Delete account error:", error);
